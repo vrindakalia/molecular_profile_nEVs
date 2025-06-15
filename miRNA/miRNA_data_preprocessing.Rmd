@@ -1,0 +1,89 @@
+---
+title: "HTG miRNA data"
+author: "Vrinda Kalia"
+date: "4/27/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(openxlsx)
+library(edgeR)
+```
+
+## Exploring the miRNA data   
+This data was generated using matched brain and blood samples obtained from the columbia tumor brain bank.  
+MiRNA data was generated from four types of samples:  
+
+*  RNA extracted from brain tissue  
+
+*  Serum  
+
+*  EVs isolated from serum (exoquick)  
+
+*  nEVs isolated from serum (neurodex) 
+
+```{r call in the data, message=FALSE, warning=FALSE}
+key <- read.xlsx("/Users/vk2316/Documents/Baccarelli_lab/EVs/Canoll_Bruce/HTG/VLP00932 Sample ID Key.xlsx") %>% 
+    mutate(group = as.numeric(factor(Sample.Description)))
+
+raw <- read.xlsx("/Users/vk2316/Documents/Baccarelli_lab/EVs/Canoll_Bruce/HTG/VLP00932_miRNA_PLATE1_20APR2023_Parsed_QualityControlled.xlsx", sheet = "Raw_samples")
+IDs <- names(raw[2:24])
+
+raw_t <- raw %>% 
+    t() %>% 
+    as.data.frame() %>% 
+    janitor::row_to_names(1) %>%
+    map_df(~as.character(.x)) %>% 
+    map_df(~as.numeric(.x)) %>% 
+    mutate(ID = IDs) %>% 
+    select(ID, everything())
+```
+
+## General workflow (Tam 2015)   
+1) Short reads are filtered for low-quality sequences/adapters   
+2) Remaining sequences are mapped to a reference  
+3) Abundance of each biological entity of interest is determined 
+4) Resulting count data are normalized  
+5) Downstream analysis to probe biological question of interest   
+
+### CPM count-per-million  
+```{r normalization CPM, message=FALSE, warning=FALSE}
+```
+
+### TMM trimmed mean of m
+```{r normalization TMM, message=FALSE, warning=FALSE}
+raw_reads <- raw %>% 
+    select(-contains("MTC")) %>% 
+    filter(!grepl("HK", rna)) %>% 
+    filter(!grepl("CTRL", rna)) %>% 
+    column_to_rownames(var = "rna")
+
+raw_reads_group <- names(raw_reads) %>% 
+    as.data.frame() %>% 
+    rename(HTG.EdgeSeq.Run.ID = 1) %>% 
+    left_join(., key, by = "HTG.EdgeSeq.Run.ID")
+
+y <- DGEList(counts=raw_reads)
+y$samples
+
+# Filter genes with low expression
+keep <- filterByExpr(y)
+y.drop <- y[keep, , keep.lib.sizes=FALSE]
+
+y.norm <- calcNormFactors(y.drop)
+y.norm$samples
+
+y.cpm <- cpm(y.norm, normalized.lib.sizes = TRUE, log = TRUE)
+
+hist(y.cpm[,norm.factor])
+
+y.cpm %>% as.data.frame() %>% 
+    rownames_to_column(var = "gene") %>% 
+    write_tsv("/Users/vk2316/Documents/Baccarelli_lab/EVs/Canoll_Bruce/HTG/TMM_normalized_log2_cpm.txt")
+```
+
+
+
+
